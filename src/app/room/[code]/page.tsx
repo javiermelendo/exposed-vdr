@@ -182,7 +182,7 @@ export default function RoomPage() {
   }
 
   async function castVote(votedForId: string) {
-    if (!myPlayer || myVote || votedForId === myPlayer.id) return
+    if (!myPlayer || myVote) return
     await supabase.from('votes').insert({
       room_id: room!.id, round: room!.current_question_index,
       voter_id: myPlayer.id, voted_for_id: votedForId,
@@ -476,19 +476,16 @@ function GameQuestion({ room, players, question, myPlayer, myVote, voteCounts, r
       <div className="flex-1 overflow-y-auto px-5 pb-5">
         {!myVote ? (
           <>
-            <p className="text-zinc-600 text-xs text-center mb-4">Toca para votar · No puedes votarte a ti mismo</p>
+            <p className="text-zinc-600 text-xs text-center mb-4">Toca para votar</p>
             <div className="grid grid-cols-2 gap-3">
               {players.map((p, i) => {
                 const isMe = p.id === myPlayer?.id
                 return (
-                  <button key={p.id} onClick={() => !isMe && onVote(p.id)} disabled={isMe}
-                    className={`flex flex-col items-center gap-2.5 rounded-2xl py-5 px-3 border transition-all
-                      ${isMe
-                        ? 'bg-zinc-900/40 border-zinc-900 opacity-35 cursor-not-allowed'
-                        : 'bg-zinc-900 border-zinc-800 hover:border-pink-500/40 active:scale-95 active:bg-zinc-800'
-                      }`}>
+                  <button key={p.id} onClick={() => onVote(p.id)}
+                    className="flex flex-col items-center gap-2.5 rounded-2xl py-5 px-3 border transition-all bg-zinc-900 border-zinc-800 hover:border-pink-500/40 active:scale-95 active:bg-zinc-800">
                     <Avatar name={p.name} index={i} size="md" />
                     <span className="text-white text-sm font-bold truncate w-full text-center leading-tight">{p.name}</span>
+                    {isMe && <span className="text-zinc-500 text-[10px] -mt-1">tú</span>}
                     {p.is_manual && <span className="text-zinc-600 text-[10px] -mt-1">sin móvil</span>}
                   </button>
                 )
