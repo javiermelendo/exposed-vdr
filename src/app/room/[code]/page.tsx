@@ -50,6 +50,7 @@ export default function RoomPage() {
   const [selectedMode, setSelectedMode] = useState<GameMode>('principiante')
 
   const [startingGame, setStartingGame] = useState(false)
+  const [aiStatus, setAiStatus] = useState<'ok' | 'error' | null>(null)
 
   const [revealStep, setRevealStep] = useState(0)
   const revealTimers = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -183,6 +184,7 @@ export default function RoomPage() {
 
   async function startGame() {
     setStartingGame(true)
+    setAiStatus(null)
     let aiQuestions: string[] | null = null
     try {
       const res = await fetch('/api/generate-questions', {
@@ -191,19 +193,24 @@ export default function RoomPage() {
         body: JSON.stringify({ playerNames: players.map(p => p.name), mode: selectedMode }),
       })
       const data = await res.json()
-      console.log('[AI] response status:', res.status, data)
       if (res.ok && Array.isArray(data.questions) && data.questions.length > 0) {
         aiQuestions = data.questions
+        setAiStatus('ok')
+      } else {
+        console.error('[AI] error:', data)
+        setAiStatus('error')
       }
     } catch (err) {
       console.error('[AI] fetch error:', err)
+      setAiStatus('error')
     }
-    await supabase.from('rooms').update({
+    const { error: dbErr } = await supabase.from('rooms').update({
       status: 'playing',
       current_question_index: 0,
       mode: selectedMode,
       ...(aiQuestions ? { ai_questions: aiQuestions, total_questions: aiQuestions.length } : {}),
     }).eq('id', room!.id)
+    if (dbErr) console.error('[DB] update error:', dbErr)
     setStartingGame(false)
   }
 
@@ -255,7 +262,7 @@ export default function RoomPage() {
     return <Lobby room={room} players={players} myPlayer={myPlayer} isHost={isHost}
       manualName={manualName} setManualName={setManualName} addingManual={addingManual}
       onAddManual={addManualPlayer} onRemove={removePlayer} onStart={startGame}
-      selectedMode={mode} onSelectMode={selectMode} isStarting={startingGame} />
+      selectedMode={mode} onSelectMode={selectMode} isStarting={startingGame} aiStatus={aiStatus} />
 
   if (room.status === 'playing')
     return <GameQuestion room={room} players={players} question={currentQ!} myPlayer={myPlayer}
@@ -333,11 +340,12 @@ function JoinScreen({ code, joinName, setJoinName, joinError, joining, onJoin, o
 // ─── Lobby ────────────────────────────────────────────────────────────────────
 
 function Lobby({ room, players, myPlayer, isHost, manualName, setManualName, addingManual,
-  onAddManual, onRemove, onStart, selectedMode, onSelectMode, isStarting }: {
+  onAddManual, onRemove, onStart, selectedMode, onSelectMode, isStarting, aiStatus }: {
   room: Room; players: Player[]; myPlayer: Player | null; isHost: boolean
   manualName: string; setManualName: (v: string) => void; addingManual: boolean
   onAddManual: () => void; onRemove: (id: string) => void; onStart: () => void
   selectedMode: GameMode; onSelectMode: (m: GameMode) => void; isStarting?: boolean
+  aiStatus?: 'ok' | 'error' | null
 }) {
   const [copied, setCopied] = useState(false)
   const canStart = players.length >= 2
@@ -437,6 +445,16 @@ function Lobby({ room, players, myPlayer, isHost, manualName, setManualName, add
                 + Add
               </button>
             </div>
+            {aiStatus === 'error' && (
+              <p className="text-amber-400 text-xs text-center bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                ⚠️ IA no disponible — usando preguntas estáticas. Revisa la API key en Vercel.
+              </p>
+            )}
+            {aiStatus === 'ok' && (
+              <p className="text-violet-400 text-xs text-center bg-violet-500/10 border border-violet-500/20 rounded-xl px-3 py-2">
+                ✨ Preguntas personalizadas con IA generadas
+              </p>
+            )}
             <button onClick={onStart} disabled={!canStart || isStarting}
               className={`w-full bg-gradient-to-r ${cfg.gradient} hover:opacity-90 active:scale-[0.98] text-white font-black py-4 rounded-2xl transition-all disabled:opacity-40 text-base shadow-lg`}>
               {isStarting ? '✨ Generando preguntas...' : canStart ? `¡Jugar ${cfg.emoji} ${cfg.name}!` : 'Mínimo 2 jugadores'}
