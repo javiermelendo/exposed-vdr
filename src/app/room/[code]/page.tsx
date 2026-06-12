@@ -260,7 +260,7 @@ export default function RoomPage() {
   if (room.status === 'playing')
     return <GameQuestion room={room} players={players} question={currentQ!} myPlayer={myPlayer}
       myVote={myVote} voteCounts={voteCounts} roundVotes={roundVotes} isHost={isHost}
-      modeConfig={modeConfig} onVote={castVote} onReveal={revealRound} />
+      modeConfig={modeConfig} onVote={castVote} onReveal={revealRound} isAI={!!room.ai_questions?.length} />
 
   if (room.status === 'revealing')
     return <Reveal room={room} players={players} tiedPlayers={tiedPlayers} voteCounts={voteCounts}
@@ -459,10 +459,11 @@ function Lobby({ room, players, myPlayer, isHost, manualName, setManualName, add
 // ─── Game question ────────────────────────────────────────────────────────────
 
 function GameQuestion({ room, players, question, myPlayer, myVote, voteCounts, roundVotes,
-  isHost, modeConfig, onVote, onReveal }: {
+  isHost, modeConfig, onVote, onReveal, isAI }: {
   room: Room; players: Player[]; question: string; myPlayer: Player | null
   myVote: Vote | undefined; voteCounts: Record<string, number>; roundVotes: Vote[]
   isHost: boolean; modeConfig: typeof GAME_MODES[0]; onVote: (id: string) => void; onReveal: () => void
+  isAI?: boolean
 }) {
   const totalVotes    = roundVotes.length
   const connectedCount = players.filter(p => !p.is_manual).length
@@ -491,6 +492,13 @@ function GameQuestion({ room, players, question, myPlayer, myVote, voteCounts, r
 
       {/* Question card */}
       <div className="flex-shrink-0 px-5 mb-5">
+        {isAI && (
+          <div className="flex justify-center mb-2">
+            <span className="text-[10px] font-bold text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-full">
+              ✨ Pregunta personalizada con IA
+            </span>
+          </div>
+        )}
         <div className={`bg-gradient-to-br ${modeConfig.gradient} p-[1px] rounded-3xl`}>
           <div className="bg-zinc-950 rounded-3xl p-6">
             <p className="text-white font-bold text-lg leading-snug text-center">{question}</p>
