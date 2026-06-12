@@ -8,6 +8,7 @@ export interface Room {
   current_question_index: number
   total_questions: number
   mode: string
+  ai_questions: string[] | null
   created_at: string
 }
 

@@ -49,6 +49,8 @@ export default function RoomPage() {
 
   const [selectedMode, setSelectedMode] = useState<GameMode>('principiante')
 
+  const [startingGame, setStartingGame] = useState(false)
+
   const [revealStep, setRevealStep] = useState(0)
   const revealTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
@@ -56,7 +58,9 @@ export default function RoomPage() {
   const isHost    = !!room && room.host_session_id === sessionId
 
   const mode         = selectedMode
-  const questionPack = QUESTIONS_BY_MODE[mode] ?? QUESTIONS_BY_MODE.principiante
+  const questionPack = room?.ai_questions?.length
+    ? room.ai_questions
+    : (QUESTIONS_BY_MODE[mode] ?? QUESTIONS_BY_MODE.principiante)
   const currentQ     = room ? questionPack[room.current_question_index % questionPack.length] : null
   const modeConfig   = GAME_MODES.find(m => m.id === mode) ?? GAME_MODES[0]
 
@@ -178,7 +182,29 @@ export default function RoomPage() {
   function selectMode(m: GameMode) { setSelectedMode(m) }
 
   async function startGame() {
-    await supabase.from('rooms').update({ status: 'playing', current_question_index: 0, mode: selectedMode }).eq('id', room!.id)
+    setStartingGame(true)
+    let aiQuestions: string[] | null = null
+    try {
+      const res = await fetch('/api/generate-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerNames: players.map(p => p.name), mode: selectedMode }),
+      })
+      const data = await res.json()
+      console.log('[AI] response status:', res.status, data)
+      if (res.ok && Array.isArray(data.questions) && data.questions.length > 0) {
+        aiQuestions = data.questions
+      }
+    } catch (err) {
+      console.error('[AI] fetch error:', err)
+    }
+    await supabase.from('rooms').update({
+      status: 'playing',
+      current_question_index: 0,
+      mode: selectedMode,
+      ...(aiQuestions ? { ai_questions: aiQuestions, total_questions: aiQuestions.length } : {}),
+    }).eq('id', room!.id)
+    setStartingGame(false)
   }
 
   async function castVote(votedForId: string) {
@@ -211,7 +237,7 @@ export default function RoomPage() {
     if (!room) return
     await supabase.from('votes').delete().eq('room_id', room.id)
     await supabase.from('players').update({ score: 0 }).eq('room_id', room.id)
-    await supabase.from('rooms').update({ status: 'waiting', current_question_index: 0 }).eq('id', room.id)
+    await supabase.from('rooms').update({ status: 'waiting', current_question_index: 0, ai_questions: null }).eq('id', room.id)
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -229,7 +255,7 @@ export default function RoomPage() {
     return <Lobby room={room} players={players} myPlayer={myPlayer} isHost={isHost}
       manualName={manualName} setManualName={setManualName} addingManual={addingManual}
       onAddManual={addManualPlayer} onRemove={removePlayer} onStart={startGame}
-      selectedMode={mode} onSelectMode={selectMode} />
+      selectedMode={mode} onSelectMode={selectMode} isStarting={startingGame} />
 
   if (room.status === 'playing')
     return <GameQuestion room={room} players={players} question={currentQ!} myPlayer={myPlayer}
@@ -307,11 +333,11 @@ function JoinScreen({ code, joinName, setJoinName, joinError, joining, onJoin, o
 // ─── Lobby ────────────────────────────────────────────────────────────────────
 
 function Lobby({ room, players, myPlayer, isHost, manualName, setManualName, addingManual,
-  onAddManual, onRemove, onStart, selectedMode, onSelectMode }: {
+  onAddManual, onRemove, onStart, selectedMode, onSelectMode, isStarting }: {
   room: Room; players: Player[]; myPlayer: Player | null; isHost: boolean
   manualName: string; setManualName: (v: string) => void; addingManual: boolean
   onAddManual: () => void; onRemove: (id: string) => void; onStart: () => void
-  selectedMode: GameMode; onSelectMode: (m: GameMode) => void
+  selectedMode: GameMode; onSelectMode: (m: GameMode) => void; isStarting?: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const canStart = players.length >= 2
@@ -411,9 +437,9 @@ function Lobby({ room, players, myPlayer, isHost, manualName, setManualName, add
                 + Add
               </button>
             </div>
-            <button onClick={onStart} disabled={!canStart}
+            <button onClick={onStart} disabled={!canStart || isStarting}
               className={`w-full bg-gradient-to-r ${cfg.gradient} hover:opacity-90 active:scale-[0.98] text-white font-black py-4 rounded-2xl transition-all disabled:opacity-40 text-base shadow-lg`}>
-              {canStart ? `¡Jugar ${cfg.emoji} ${cfg.name}!` : 'Mínimo 2 jugadores'}
+              {isStarting ? '✨ Generando preguntas...' : canStart ? `¡Jugar ${cfg.emoji} ${cfg.name}!` : 'Mínimo 2 jugadores'}
             </button>
           </>
         ) : (
